@@ -1,6 +1,9 @@
-use std::{fs::create_dir, path::PathBuf};
+use std::{
+    fs::create_dir,
+    path::{Path, PathBuf},
+};
 
-use slu_utils::{checksums::CheckSums, signature::sign_minisign};
+use slu_utils::checksums::CheckSums;
 
 fn main() {
     let _ = create_dir("gen");
@@ -55,15 +58,10 @@ where
     }
 }
 
-fn sign_sha256sums(path: &PathBuf) {
-    let key_base64 =
-        std::env::var("TAURI_SIGNING_PRIVATE_KEY").expect("TAURI_SIGNING_PRIVATE_KEY missing");
-    let password = std::env::var("TAURI_SIGNING_PRIVATE_KEY_PASSWORD")
-        .expect("TAURI_SIGNING_PRIVATE_KEY_PASSWORD missing");
-
-    let data = std::fs::read(path).expect("Failed to read SHA256SUMS file");
-    let signature = sign_minisign(&data, &key_base64, password).expect("Failed to sign data");
-
-    let sig_path = path.with_extension("sig");
-    std::fs::write(&sig_path, signature).expect("Failed to write signature");
+fn sign_sha256sums(path: &Path) {
+    // PATCH (2026-11-21, local fork): no release signing infrastructure available
+    // for self-built/cloud builds. Dev builds already run with a dummy signature
+    // (NOT SIGNED NEEDED FOR DEBUG), so the runtime tolerates it — write the same
+    // marker for release builds too.
+    std::fs::write(path.with_extension("sig"), "NOT SIGNED (LOCAL FORK)").unwrap();
 }
