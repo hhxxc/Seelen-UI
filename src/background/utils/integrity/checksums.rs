@@ -9,9 +9,6 @@ use crate::error::Result;
 use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
-/// Public key for minisign verification (same as updater)
-const MINISIGN_PUBLIC_KEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4QjU1RUI0NEM0NzBERUIKUldUckRVZE10RjYxU0lpaERvdklYL05DVlg0Sk9EVngvaEgzZjMvU1NNemJTZXZ1K0dNVXU3ZkQK";
-
 pub async fn ensure_bundle_files_integrity(app: &tauri::AppHandle) -> Result<()> {
     log::trace!("Validating bundle files integrity");
 
@@ -29,10 +26,13 @@ pub async fn ensure_bundle_files_integrity(app: &tauri::AppHandle) -> Result<()>
         return Err("Checksums file not found".into());
     }
 
-    // Skip signature validation in development mode
-    if !tauri::is_dev() {
-        verify_external_signature(&checksums_path, &signature_path, MINISIGN_PUBLIC_KEY)?;
-    }
+    // PATCH (2026-11-21, local fork): skip the source-authentication signature
+    // check — self-built binaries are not signed with the official key. The
+    // directory checksum validation below still guards against tampered or
+    // corrupted installed files.
+    // if !tauri::is_dev() {
+    //     verify_external_signature(&checksums_path, &signature_path, MINISIGN_PUBLIC_KEY)?;
+    // }
     validate_directory_checksums(&static_path, &checksums_path).await?;
 
     Ok(())
@@ -85,15 +85,6 @@ async fn validate_directory_checksums(base_path: &Path, checksums_path: &Path) -
     }
 
     log::trace!("All Checksums validated successfully");
-    Ok(())
-}
-
-fn verify_external_signature(file: &Path, signature_file: &Path, key_base64: &str) -> Result<()> {
-    let checksums_content = std::fs::read(file)?;
-    let signature_content = std::fs::read_to_string(signature_file)?;
-
-    slu_utils::signature::verify_minisign(&checksums_content, &signature_content, key_base64)?;
-    log::trace!("Signature verification successful for {}", file.display());
     Ok(())
 }
 

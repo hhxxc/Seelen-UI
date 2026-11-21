@@ -26,7 +26,6 @@ use crate::{
     event_manager,
     platform::session,
     utils::spawn_named_thread,
-    widgets::manager::WIDGET_MANAGER,
 };
 
 use super::{WindowsApi, string_utils::WindowsString};
@@ -150,17 +149,12 @@ impl BgWindowProc {
             is_interactive
         );
 
-        let previous = session::set_interactive(is_interactive);
-        if !previous && is_interactive {
-            // reload all pods webviews on session resume
-            std::thread::spawn(move || {
-                WIDGET_MANAGER.deployments.for_each(|(_, deployment)| {
-                    deployment.pods.for_each(|(_, pod)| {
-                        pod.soft_restart();
-                    });
-                });
-            });
-        }
+        let _previous = session::set_interactive(is_interactive);
+        // PATCH (2026-11-21, local fork): removed the unconditional soft_restart()
+        // of every widget pod on session resume — it caused a visible 2-4s flicker
+        // of all widgets on every unlock. Broken webviews are still recovered by the
+        // per-pod liveness prove system (10s grace + pings + automatic reload), so
+        // the proactive reload was redundant.
     }
 
     unsafe extern "system" fn window_proc(
@@ -198,6 +192,10 @@ impl BgWindowProc {
                     {
                         session::set_locked(false);
                         log::info!("Session unlocked");
+                        // PATCH (2026-11-21, local fork): explorer re-shows the native
+                        // taskbar on session unlock — request the suppression again
+                        // immediately so it never stays visible after unlocking.
+                        crate::widgets::weg::SeelenWeg::hide_native_taskbar();
                     }
                     _ => {}
                 }

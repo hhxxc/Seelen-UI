@@ -5,8 +5,8 @@ use windows::Win32::{
     System::LibraryLoader::GetModuleHandleW,
     UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, MSG, PostQuitMessage,
-        RegisterClassW, SW_HIDE, SW_SHOWNORMAL, TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE,
-        WM_DESTROY, WM_ENDSESSION, WM_QUERYENDSESSION, WNDCLASSW,
+        RegisterClassW, SW_HIDE, SW_SHOWNORMAL, SetTimer, TranslateMessage, WINDOW_EX_STYLE,
+        WINDOW_STYLE, WM_DESTROY, WM_ENDSESSION, WM_QUERYENDSESSION, WM_TIMER, WNDCLASSW,
     },
 };
 
@@ -23,6 +23,10 @@ use crate::{
 /// Tracks whether we actually hid the native taskbar, so we only restore it
 /// when it was hidden by us (avoids unnecessary restores on settings changes/shutdown).
 static NATIVE_TASKBAR_HIDDEN: AtomicBool = AtomicBool::new(false);
+/// PATCH (2026-11-21, local fork): intent flag — the WEG wants the native taskbar
+/// suppressed. The periodic timer only re-asserts while this is true, so a
+/// restore request (WEG disabled) genuinely brings the taskbar back.
+static SUPPRESSION_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Set by every hide request and consumed by the worker before each pass, so a request
 /// that arrives while a pass is running is never lost: it schedules one more pass.
 static HIDE_REQUESTED: AtomicBool = AtomicBool::new(false);
@@ -49,6 +53,7 @@ pub fn get_taskbars_handles() -> Result<Vec<HWND>> {
 }
 
 pub fn hide_native_taskbar() {
+    SUPPRESSION_ACTIVE.store(true, Ordering::SeqCst);
     NATIVE_TASKBAR_HIDDEN.store(true, Ordering::SeqCst);
     HIDE_REQUESTED.store(true, Ordering::SeqCst);
     if HIDE_WORKER_RUNNING.swap(true, Ordering::SeqCst) {
@@ -137,6 +142,7 @@ fn run_hide_pass() {
 }
 
 pub fn restore_native_taskbar() -> Result<()> {
+    SUPPRESSION_ACTIVE.store(false, Ordering::SeqCst);
     if NATIVE_TASKBAR_HIDDEN
         .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
         .is_err()
@@ -168,6 +174,14 @@ unsafe extern "system" fn shutdown_window_proc(
                 crate::exit(0);
             }
             WM_DESTROY => PostQuitMessage(0),
+            // PATCH (2026-11-21, local fork): periodic re-assertion. The hide passes
+            // only run ~4.3s after each request; afterwards explorer can re-show the
+            // taskbar (session unlock, foreground changes, display changes) with
+            // nothing re-hiding it until the next event arrives. This timer keeps the
+            // suppression continuous while the WEG wants it (SUPPRESSION_ACTIVE).
+            WM_TIMER if w_param.0 == 1 && SUPPRESSION_ACTIVE.load(Ordering::SeqCst) => {
+                hide_native_taskbar();
+            }
             _ => {}
         }
         DefWindowProcW(hwnd, msg, w_param, l_param)
@@ -205,6 +219,9 @@ unsafe fn create_shutdown_window(done: &crossbeam_channel::Sender<()>) -> Result
             Some(wnd_class.hInstance),
             None,
         )?;
+
+        // PATCH (2026-11-21, local fork): 2s patrol timer for the taskbar suppression
+        SetTimer(Some(hwnd), 1, 2000, None);
 
         done.send(())?;
         let mut msg = MSG::default();

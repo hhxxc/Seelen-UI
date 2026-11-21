@@ -18,3 +18,8 @@ rustc-ice-*.txt
 CLAUDE.md
 GEMINI.md
 .claude
+# local fork exclusions (never push)
+appdata-backup/
+build*.log
+signing/
+nul
