@@ -10,6 +10,10 @@
   import Icon from "libs/ui/svelte/components/Icon/Icon.svelte";
   import FileIcon from "libs/ui/svelte/components/Icon/FileIcon.svelte";
   import moment from "moment";
+  // moment ships english only; load the chinese locale files so
+  // .locale("zh-cn").fromNow() resolves instead of silently falling back to en
+  import "moment/locale/zh-cn";
+  import "moment/locale/zh-tw";
   import { locale } from "../i18n/index.ts";
 
   interface Props {
