@@ -18,14 +18,19 @@ use super::domain::{CredentialStore, JwtPayload, decode_jwt_payload};
 type Platform = windows::WindowsCredentials;
 
 // ─── Shared HTTP client ───────────────────────────────────────────────────────
-
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+//
+// NOTE: intentionally built per call instead of cached in a static. reqwest
+// bakes the system-proxy state into the client at build time, so a static
+// client created at app startup (usually before proxy tools like Clash set the
+// system proxy) would freeze every request to direct and break
+// product.seelen.io downloads behind proxies.
+fn http_client() -> reqwest::Client {
     reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .user_agent(concat!("SeelenUI/", env!("CARGO_PKG_VERSION")))
         .build()
         .expect("failed to build reqwest client")
-});
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -213,7 +218,7 @@ impl SessionManager {
         let refresh_token = Self::read_credential(REFRESH_TOKEN_KEY)
             .map_err(|_| "No stored refresh token — user must log in again")?;
 
-        let response = HTTP_CLIENT
+        let response = http_client()
             .post(format!("{AUTH_BASE_URL}/v1/auth/refresh"))
             .header("Cookie", format!("refresh_token={refresh_token}"))
             .send()
@@ -272,7 +277,7 @@ impl SessionManager {
         }
 
         // Exchange the app refresh token for a short-lived access token.
-        let response = HTTP_CLIENT
+        let response = http_client()
             .post(format!("{AUTH_BASE_URL}/v1/auth/refresh"))
             .header("Cookie", format!("refresh_token={code}"))
             .send()
@@ -303,7 +308,7 @@ impl SessionManager {
     pub async fn logout() -> Result<()> {
         // Best-effort server-side invalidation.
         if let Ok(refresh_token) = Self::read_credential(REFRESH_TOKEN_KEY) {
-            let _ = HTTP_CLIENT
+            let _ = http_client()
                 .post(format!("{AUTH_BASE_URL}/v1/auth/logout"))
                 .header("Cookie", format!("refresh_token={refresh_token}"))
                 .send()
@@ -324,13 +329,13 @@ impl SessionManager {
     /// Returns a GET request builder without any auth headers.
     /// Use this for direct CDN/S3 asset URLs that do not accept the Bearer scheme.
     pub fn plain_get(url: &str) -> reqwest::RequestBuilder {
-        HTTP_CLIENT.get(url)
+        http_client().get(url)
     }
 
     /// Returns a GET request builder with `Authorization: Bearer <token>` set if a
     /// session is active. Use this for all authenticated background HTTP requests.
     pub fn authed_get(url: &str) -> reqwest::RequestBuilder {
-        let mut req = HTTP_CLIENT.get(url);
+        let mut req = http_client().get(url);
         if let Ok(token) = Self::get_access_token() {
             req = req.header("Authorization", format!("Bearer {token}"));
         }
@@ -340,7 +345,7 @@ impl SessionManager {
     /// Returns a POST request builder with `Authorization: Bearer <token>` set if a
     /// session is active.
     pub fn authed_post(url: &str) -> reqwest::RequestBuilder {
-        let mut req = HTTP_CLIENT.post(url);
+        let mut req = http_client().post(url);
         if let Ok(token) = Self::get_access_token() {
             req = req.header("Authorization", format!("Bearer {token}"));
         }

@@ -10,6 +10,7 @@
   import Icon from "libs/ui/svelte/components/Icon/Icon.svelte";
   import FileIcon from "libs/ui/svelte/components/Icon/FileIcon.svelte";
   import moment from "moment";
+  import { locale } from "../i18n/index.ts";
 
   interface Props {
     notification: AppNotification;
@@ -106,7 +107,7 @@
       <div>{notification.appName}</div>
       <span>-</span>
       <div>
-        {moment(notification.date).fromNow()}
+        {moment(notification.date).locale(locale.value.toLowerCase()).fromNow()}
       </div>
     </div>
     <button data-skin="transparent" onclick={handleClose}>
@@ -121,6 +122,7 @@
         alt={logoImage["@alt"] || ""}
         class="notification-body-logo-image"
         class:notification-body-logo-image-circle={logoImage["@hint-crop"] === "Circle"}
+        onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
       />
     {/if}
 
@@ -130,7 +132,11 @@
           <p>{entry.text.$value}</p>
         {:else if "image" in entry && entry.image["@src"]}
           {#if entry.image["@placement"] !== "AppLogoOverride" && entry.image["@placement"] !== "Hero"}
-            <img src={entry.image["@src"]} alt={entry.image["@alt"] || ""} />
+            <img
+              src={entry.image["@src"]}
+              alt={entry.image["@alt"] || ""}
+              onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+            />
           {/if}
         {:else if "group" in entry}
           <div class="notification-group">
@@ -140,7 +146,11 @@
                   {#if "text" in subEntry}
                     <p>{subEntry.text.$value}</p>
                   {:else if "image" in subEntry && subEntry.image["@src"]}
-                    <img src={subEntry.image["@src"]} alt={subEntry.image["@alt"] || ""} />
+                    <img
+                    src={subEntry.image["@src"]}
+                    alt={subEntry.image["@alt"] || ""}
+                    onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+                  />
                   {/if}
                 {/each}
               </div>
@@ -155,6 +165,7 @@
         src={heroImage["@src"]}
         alt={heroImage["@alt"] || ""}
         class="notification-body-hero-image"
+        onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
       />
     {/if}
   </div>

@@ -138,6 +138,16 @@ impl UserAppsManager {
                 rect,
                 monitor,
             } => {
+                // Skip the broadcast when nothing actually changed: windows emit
+                // EVENT_OBJECT_LOCATIONCHANGE in bursts (drag, animations, video
+                // playback) and every broadcast re-renders all listening widgets.
+                if data.is_zoomed == is_zoomed
+                    && data.is_fullscreen == is_fullscreen
+                    && data.rect == rect
+                    && data.monitor == monitor
+                {
+                    return false;
+                }
                 data.is_zoomed = is_zoomed;
                 data.is_fullscreen = is_fullscreen;
                 data.rect = rect;

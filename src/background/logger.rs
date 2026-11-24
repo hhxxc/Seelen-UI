@@ -49,7 +49,10 @@ impl SeelenLogger {
             .chain(fern::log_file(log_path)?);
 
         let dispatch = fern::Dispatch::new()
-            .level(log::LevelFilter::Trace)
+            // Fork tweak: upstream ships with Trace, which logs every IPC and
+            // poll tick (87% of the log volume) and rotates the 5MB file every
+            // couple of hours. Debug keeps state changes while cutting the noise.
+            .level(log::LevelFilter::Debug)
             .level_for("tao", log::LevelFilter::Error)
             .level_for("os_info", log::LevelFilter::Error)
             .level_for("notify", log::LevelFilter::Error)
