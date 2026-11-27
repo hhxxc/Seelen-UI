@@ -4,21 +4,14 @@ if (!batteries.length) {
 
 const averagePercentage = batteries.reduce((total, battery) => total + battery.percentage, 0) / batteries.length;
 
-const isCharging = power.acLineStatus === 1 ||
-  batteries.some((battery) => {
-    return battery.state === "charging";
-  });
+// `power.acLineStatus === 1` only means the adapter is plugged in: a laptop in a charge-limit or
+// care mode reports "full"/"discharging" while still plugged, so it must not be shown as charging.
+const isCharging = batteries.some((battery) => {
+  return battery.state === "charging";
+});
 const isSmartChargeActive = batteries.some((battery) => battery.smartCharging);
 
 let group = [];
-
-if (isCharging) {
-  group.push(icon("BsLightningChargeFill"));
-  if (isSmartChargeActive) {
-    group.push(icon("IoHeart"));
-  }
-  group.push(" ");
-}
 
 if (powerMode === "BetterBattery" || powerMode === "BatterySaver") {
   group.push(icon("IoLeaf"));
@@ -34,17 +27,27 @@ if (powerMode === "BetterBattery" || powerMode === "BatterySaver") {
   group.push(" ");
 }
 
-group.push(
-  averagePercentage > 90
-    ? icon("PiBatteryFullFill")
-    : averagePercentage > 66
-    ? icon("PiBatteryHighFill")
-    : averagePercentage > 33
-    ? icon("PiBatteryMediumFill")
-    : averagePercentage > 5
-    ? icon("PiBatteryLowFill")
-    : icon("PiBatteryWarning"),
-);
+if (isSmartChargeActive) {
+  group.push(icon("IoHeart"));
+  group.push(" ");
+}
+
+// The charging state lives inside the battery icon (bolt), with no extra bolt next to it: that way
+// "plugged in but not charging" can not be read as charging. Charging uses the dedicated charging
+// icon, the level is still readable from the percentage next to it.
+if (isCharging) {
+  group.push(icon("PiBatteryChargingFill"));
+} else if (averagePercentage > 90) {
+  group.push(icon("PiBatteryFullFill"));
+} else if (averagePercentage > 66) {
+  group.push(icon("PiBatteryHighFill"));
+} else if (averagePercentage > 33) {
+  group.push(icon("PiBatteryMediumFill"));
+} else if (averagePercentage > 5) {
+  group.push(icon("PiBatteryLowFill"));
+} else {
+  group.push(icon("PiBatteryWarning"));
+}
 
 group.push(" ");
 group.push(averagePercentage);
