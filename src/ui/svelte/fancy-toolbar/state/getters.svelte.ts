@@ -33,7 +33,19 @@ export const windowsColors = lazyRune<Record<number, UserAppWindowColors>>(
 subscribe(SeelenEvent.UserAppWindowsColorsChanged, windowsColors.setByPayload);
 
 export const focused = lazyRune(() => invoke(SeelenCommand.GetFocusedApp));
-subscribe(SeelenEvent.GlobalFocusChanged, focused.setByPayload);
+// Debounce focus updates: transient windows (screenshot overlays, tool popups)
+// steal the foreground for a split second and would otherwise make the
+// focused-app icon/title in the toolbar flicker.
+let _focusDebounce: ReturnType<typeof setTimeout> | null = null;
+subscribe(SeelenEvent.GlobalFocusChanged, (args) => {
+  if (_focusDebounce) {
+    clearTimeout(_focusDebounce);
+  }
+  _focusDebounce = setTimeout(() => {
+    _focusDebounce = null;
+    focused.setByPayload(args);
+  }, 250);
+});
 
 export const widgetStatuses = lazyRune(() => invoke(SeelenCommand.DebugGetWidgetsStatuses));
 subscribe(SeelenEvent.WidgetDebugInfoChanged, widgetStatuses.setByPayload);
