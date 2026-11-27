@@ -36,7 +36,7 @@ if (isSmartChargeActive) {
 // "plugged in but not charging" can not be read as charging. Charging uses the dedicated charging
 // icon, the level is still readable from the percentage next to it.
 if (isCharging) {
-  group.push(icon("PiBatteryChargingFill"));
+  group.push(icon("BsBatteryCharging"));
 } else if (averagePercentage > 90) {
   group.push(icon("PiBatteryFullFill"));
 } else if (averagePercentage > 66) {
