@@ -167,23 +167,38 @@ jobs:
         with:
           node-version: 24
 
-      - name: Clean existing assets
+      - name: Ensure nightly release and clean existing assets
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const tagName = 'nightly';
+            const base = { owner: context.repo.owner, repo: context.repo.repo };
 
-            const release = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag: tagName,
-            });
+            let release;
+            try {
+              release = (await github.rest.repos.getReleaseByTag({ ...base, tag: tagName })).data;
+            } catch (error) {
+              // 404 means this repo never published a nightly release yet (fresh fork, or the
+              // release was deleted). Create it instead of failing the whole run: the upload and
+              // the update-manifest steps below both need it to exist.
+              if (error.status !== 404) {
+                throw error;
+              }
+              core.info(`No '${tagName}' release yet, creating it`);
+              release = (await github.rest.repos.createRelease({
+                ...base,
+                tag_name: tagName,
+                name: 'Seelen UI Nightly',
+                body: 'Automated nightly build, updated on every push to master.',
+                prerelease: true,
+                draft: false,
+              })).data;
+            }
 
             const { data: assets } = await github.rest.repos.listReleaseAssets({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: release.data.id,
+              ...base,
+              release_id: release.id,
             });
 
             core.info(`Found ${assets.length} existing assets to clean`);
@@ -191,8 +206,7 @@ jobs:
             const deletions = assets.map(asset => {
               core.info(`Deleting ${asset.name}`);
               return github.rest.repos.deleteReleaseAsset({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
+                ...base,
                 asset_id: asset.id,
               });
             });
