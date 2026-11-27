@@ -1,5 +1,5 @@
 use std::sync::{
-    LazyLock,
+    Arc, LazyLock,
     atomic::{AtomicBool, Ordering},
 };
 
@@ -25,8 +25,12 @@ pub static WIDGET_MANAGER: LazyLock<WidgetManager> = LazyLock::new(WidgetManager
 pub static GAME_MODE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 pub struct WidgetManager {
-    /// group of widgets instances by widget resource id
-    pub deployments: SyncHashMap<WidgetId, WidgetDeployment>,
+    /// group of widgets instances by widget resource id.
+    ///
+    /// Shared (`Arc`) so operations that must not run under the lock — starting or destroying
+    /// webviews, which take hundreds of milliseconds each — can snapshot the deployments and do
+    /// the work after releasing it.
+    pub deployments: SyncHashMap<WidgetId, Arc<WidgetDeployment>>,
 }
 
 impl WidgetManager {
@@ -72,9 +76,13 @@ impl WidgetManager {
 
     pub fn suspend_all(&self) {
         GAME_MODE_ACTIVE.store(true, Ordering::Release);
-        self.deployments.for_each(|(_, deploy)| {
-            deploy.pods.clear();
-        });
+        // Dropping the pods destroys their webviews: snapshot first and clear outside the
+        // deployments lock, otherwise every other widget operation stalls for the teardown.
+        let deployments: Vec<Arc<WidgetDeployment>> =
+            self.deployments.map(|(_, deployment)| deployment.clone());
+        for deployment in deployments {
+            deployment.pods.clear();
+        }
     }
 
     pub fn resume_all(&self) -> Result<()> {
@@ -83,9 +91,19 @@ impl WidgetManager {
     }
 
     pub fn reconcile(&self) -> Result<()> {
-        // remove deleted resources
-        self.deployments
-            .retain(|(key, _)| RESOURCES.widgets.contains_sync(key));
+        // remove deleted resources. `retain` would drop the removed deployments (and with them
+        // their webviews) while holding the map, so collect them first and let them go after.
+        let stale: Vec<WidgetId> = self
+            .deployments
+            .map(|(id, _)| id.clone())
+            .into_iter()
+            .filter(|id| !RESOURCES.widgets.contains_sync(id))
+            .collect();
+        let dropped: Vec<Arc<WidgetDeployment>> = stale
+            .iter()
+            .filter_map(|id| self.deployments.remove(id))
+            .collect();
+        drop(dropped);
 
         let mut filtered = Vec::new();
         RESOURCES.widgets.iter_sync(|k, w| {
@@ -104,34 +122,40 @@ impl WidgetManager {
 
             if !self.deployments.contains_key(&id) {
                 self.deployments
-                    .upsert(id.clone(), WidgetDeployment::new(widget));
+                    .upsert(id.clone(), Arc::new(WidgetDeployment::new(widget)));
             }
         }
 
         // lazy creation of webviews to reduce startup time
         std::thread::spawn(|| {
-            fn reconcile(deployment: &WidgetDeployment) {
+            // Snapshot the deployments before starting anything: creating a webview takes
+            // hundreds of milliseconds, and doing it under the deployments lock blocked every
+            // other widget's liveness prove, trigger and status read for seconds — a single
+            // monitor change used to reload all of them.
+            let mut deployments: Vec<(WidgetId, Arc<WidgetDeployment>)> = WIDGET_MANAGER
+                .deployments
+                .map(|(id, deployment)| (id.clone(), deployment.clone()));
+
+            // More visual widgets load first
+            let rank = |id: &WidgetId| -> u8 {
+                if id == &WidgetId::known_wall() {
+                    0
+                } else if id == &WidgetId::known_toolbar() {
+                    1
+                } else if id == &WidgetId::known_weg() {
+                    2
+                } else {
+                    3
+                }
+            };
+            deployments.sort_by_key(|(id, _)| rank(id));
+
+            for (_, deployment) in deployments {
                 deployment.reconcile();
                 if !deployment.definition.lazy && !GAME_MODE_ACTIVE.load(Ordering::Acquire) {
                     deployment.start_all_webviews();
                 }
             }
-
-            // More visual widgets load first
-            for priority in [
-                WidgetId::known_wall(),
-                WidgetId::known_toolbar(),
-                WidgetId::known_weg(),
-            ] {
-                WIDGET_MANAGER.deployments.get(&priority, |deployment| {
-                    reconcile(deployment);
-                });
-            }
-
-            // All other widgets
-            WIDGET_MANAGER.deployments.for_each(|(_, deployment)| {
-                reconcile(deployment);
-            });
         });
 
         Ok(())
