@@ -2,10 +2,14 @@ pub mod app_bar;
 pub mod com;
 pub mod iterator;
 
-use std::{ffi::OsString, os::windows::ffi::OsStringExt, path::PathBuf};
+use std::{ffi::OsString, mem::size_of, os::windows::ffi::OsStringExt, path::PathBuf};
 
 use windows::Win32::{
     Foundation::{HANDLE, HWND, LUID},
+    Graphics::{
+        Dwm::{DWMWA_CLOAK, DwmSetWindowAttribute},
+        Gdi::{CreateRectRgn, DeleteObject, SetWindowRgn},
+    },
     Security::{
         AdjustTokenPrivileges, LookupPrivilegeValueW, SE_PRIVILEGE_ENABLED,
         TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
@@ -25,7 +29,7 @@ use windows::Win32::{
         },
     },
 };
-use windows_core::{Owned, PCWSTR};
+use windows_core::{BOOL, Owned, PCWSTR};
 
 use crate::{
     error::{Result, WindowsResultExt},
@@ -69,6 +73,53 @@ impl WindowsApi {
 
     pub fn is_window_visible(hwnd: HWND) -> bool {
         unsafe { IsWindowVisible(hwnd) }.as_bool()
+    }
+
+    /// Cloaks/uncloaks the window without touching its visibility state.
+    ///
+    /// A cloaked window is not composited at all, but `IsWindowVisible` still reports it as
+    /// shown, so the shell never tries to "restore" it (see [`Self::suppress_window_visuals`]).
+    pub fn set_window_cloaked(hwnd: HWND, cloaked: bool) -> Result<()> {
+        let value = BOOL::from(cloaked);
+        unsafe {
+            DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAK,
+                (&raw const value).cast(),
+                size_of::<BOOL>() as u32,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Makes the window invisible **without** hiding it: an empty window region (paints nothing
+    /// and fails every hit test) plus a DWM cloak (not composited at all).
+    ///
+    /// This is what the native taskbar suppression uses instead of `ShowWindow(SW_HIDE)`:
+    /// hiding it makes explorer believe the taskbar is not shown, so it re-shows it on the next
+    /// shell event (every foreground change, every auto-hide peek). Each of those show/hide
+    /// cycles recomposites a full-width topmost window, which blinks the whole screen. Kept
+    /// "visible" but suppressed, explorer has nothing to restore and nothing is ever drawn.
+    pub fn suppress_window_visuals(hwnd: HWND) -> Result<()> {
+        let region = unsafe { CreateRectRgn(0, 0, 0, 0) };
+        if region.is_invalid() {
+            return Err("CreateRectRgn failed".into());
+        }
+        // On success the system owns the region and deletes it with the window; it must only be
+        // freed here when the call failed.
+        if unsafe { SetWindowRgn(hwnd, Some(region), true) } == 0 {
+            unsafe {
+                let _ = DeleteObject(region.into());
+            }
+            return Err("SetWindowRgn failed".into());
+        }
+        Self::set_window_cloaked(hwnd, true)
+    }
+
+    /// Reverts [`Self::suppress_window_visuals`].
+    pub fn restore_window_visuals(hwnd: HWND) -> Result<()> {
+        let _ = unsafe { SetWindowRgn(hwnd, None, true) };
+        Self::set_window_cloaked(hwnd, false)
     }
 
     pub fn set_position(
