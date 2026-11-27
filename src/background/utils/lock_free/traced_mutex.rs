@@ -163,6 +163,14 @@ impl<T> TracedMutex<T> {
         }
     }
 
+    /// Non-blocking probe: whether the mutex is held right now (by any thread, including the
+    /// caller). It does not register in the wait-for graph, so it is safe on hot paths: callers
+    /// use it to tell "the backend is busy right now" apart from "something is broken".
+    #[inline]
+    pub fn is_locked(&self) -> bool {
+        self.inner.try_lock().is_none()
+    }
+
     #[inline]
     #[track_caller]
     fn on_acquired<'a>(&'a self, guard: MutexGuard<'a, T>) -> TracedMutexGuard<'a, T> {

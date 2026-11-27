@@ -26,6 +26,15 @@ where
         self.0.lock().is_empty()
     }
 
+    /// Non-blocking probe: whether some thread currently holds this map.
+    ///
+    /// Used by the widget liveness prove: while the manager is rebuilding webviews it holds this
+    /// map for seconds, and a missed pong during that window says nothing about the widgets.
+    #[inline]
+    pub fn is_locked(&self) -> bool {
+        self.0.is_locked()
+    }
+
     #[inline]
     pub fn upsert(&self, key: K, value: V) -> Option<V> {
         self.0.lock().insert(key, value)

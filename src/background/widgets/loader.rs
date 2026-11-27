@@ -311,6 +311,15 @@ impl WidgetPod {
                     continue;
                 }
 
+                // The manager rebuilds webviews while holding the deployments map for seconds
+                // (`WidgetManager::reconcile` → `start_all_webviews`, `suspend_all`). While that
+                // runs, pings can not be answered and every widget would be judged dead and
+                // reloaded at once — a single monitor change used to reload all of them. A busy
+                // backend is not a dead widget: skip the cycle without touching the counter.
+                if WIDGET_MANAGER.deployments.is_locked() {
+                    continue;
+                }
+
                 let _ = app.emit_to(&label.raw, "internal::liveness-ping", ());
 
                 tokio::select! {
@@ -319,6 +328,12 @@ impl WidgetPod {
                         retries.store(0, std::sync::atomic::Ordering::SeqCst);
                     }
                     _ = tokio::time::sleep(LIVENESS_PROVE_WAIT_TIMEOUT) => {
+                        // The lock may have been taken while we were waiting for the pong: the
+                        // answer is just delayed behind the rebuild, not missing.
+                        if WIDGET_MANAGER.deployments.is_locked() {
+                            continue;
+                        }
+
                         let attempt = retries.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                         log::warn!("Liveness prove failed for {label} (attempt {}/{LIVENESS_PROVE_MAX_RETRIES}), reloading webview.", attempt + 1);
 
