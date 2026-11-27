@@ -24,6 +24,24 @@ subscribe(SeelenEvent.GlobalMouseMove, ({ payload: [x, y] }) => {
   mousePos.value = { x, y };
 });
 
+/**
+ * Re-reads the cursor position over IPC instead of waiting for `GlobalMouseMove`.
+ *
+ * The dock reveal depends entirely on that event, and after a webview reload during a stall
+ * the event channel can come back dead while the JS keeps running (the liveness prove still
+ * passes): the position stays frozen at its old value, so the dock never reveals again until
+ * the app is restarted. Setting the value also marks a never-initialized rune as initialized,
+ * so this doubles as recovery from a failed initial `GetMousePosition` (broken IPC at startup).
+ */
+export async function refreshMousePos(): Promise<void> {
+  try {
+    const [x, y] = await invoke(SeelenCommand.GetMousePosition);
+    mousePos.value = { x, y };
+  } catch {
+    // IPC still unavailable: the next tick retries.
+  }
+}
+
 export const settings = lazyRune(() => Settings.getAsync());
 Settings.onChange((s) => (settings.value = s));
 

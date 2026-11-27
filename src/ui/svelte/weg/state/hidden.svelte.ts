@@ -1,9 +1,19 @@
 import { HideMode, WegAttentionReveal, WindowAttention } from "@seelen-ui/lib/types";
-import { virtualDesktops } from "./getters.svelte.ts";
+import { mousePos, refreshMousePos, virtualDesktops } from "./getters.svelte.ts";
 import { settingsState } from "./settings.svelte.ts";
 import { systemState } from "./system.svelte.ts";
 import { windowsState } from "./windows.svelte.ts";
 import { isThisWebviewFocused, isTouchPrimary } from "libs/ui/svelte/utils";
+
+/** size of the bottom-right corner hotzone that force hides the dock */
+const FORCE_HIDE_CORNER_PX = 60;
+
+/**
+ * How often the cursor is re-read while the dock is hidden. The reveal depends on the
+ * `GlobalMouseMove` event, which can stop being delivered after a webview reload during a stall
+ * (see `refreshMousePos`), leaving the dock hidden with no way to summon it.
+ */
+const HIDDEN_MOUSE_POLL_MS = 300;
 
 const isSwitchingWorkspace = $derived(virtualDesktops.value.switching);
 
@@ -38,6 +48,19 @@ export const dockIsDragging = {
   },
 };
 
+// While hidden, keep the cursor position fresh even if GlobalMouseMove stopped arriving.
+// Once the dock is out the cursor is over its own window, so the normal events are enough to
+// hide it again and the poll is not needed.
+$effect.root(() => {
+  $effect(() => {
+    if (!_hiddenByAutohide) {
+      return;
+    }
+    const id = setInterval(refreshMousePos, HIDDEN_MOUSE_POLL_MS);
+    return () => clearInterval(id);
+  });
+});
+
 $effect.root(() => {
   let timeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -53,6 +76,19 @@ $effect.root(() => {
     const { delayToHide, delayToShow, hideMode, position } = settingsState;
     const isMouseOverEdge = systemState.mouseAtEdge === position;
 
+    // The focus signal is event-driven, so a single missed GlobalFocusChanged
+    // leaves it stuck at true and the dock never hides. document.hasFocus() is
+    // the live state of this webview; it is re-evaluated on every mouse move
+    // (this effect depends on mousePos), which self-heals the stuck flag.
+    const isActuallyFocused = isThisWebviewFocused.value && document.hasFocus();
+
+    // Mouse parked in the bottom-right corner forces the dock to hide,
+    // regardless of focus state or attention reveals.
+    const monitor = systemState.currentMonitor;
+    const cursor = mousePos.value;
+    const inForceHideCorner = cursor.x >= monitor.rect.right - FORCE_HIDE_CORNER_PX &&
+      cursor.y >= monitor.rect.bottom - FORCE_HIDE_CORNER_PX;
+
     let hidden = false;
     let flush = false;
 
@@ -62,13 +98,13 @@ $effect.root(() => {
         flush = true;
         break;
       case HideMode.Always:
-        hidden = !isTouchPrimary.value && !isThisWebviewFocused.value && !isMouseOverEdge;
+        hidden = !isTouchPrimary.value && !isActuallyFocused && !isMouseOverEdge;
         flush = isTouchPrimary.value;
         break;
       case HideMode.OnOverlap:
         hidden = !isTouchPrimary.value &&
           windowsState.isDockOverlapped &&
-          !isThisWebviewFocused.value &&
+          !isActuallyFocused &&
           !isMouseOverEdge;
         flush = isTouchPrimary.value;
         break;
@@ -81,6 +117,11 @@ $effect.root(() => {
 
     if (hidden && isRevealedByAttention) {
       hidden = false;
+    }
+
+    if (inForceHideCorner) {
+      hidden = true;
+      flush = true;
     }
 
     if (hidden) {
