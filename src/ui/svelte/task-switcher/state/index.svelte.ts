@@ -1,13 +1,16 @@
 import { invoke, SeelenCommand } from "@seelen-ui/lib";
 import { debounce } from "lodash";
 import z from "zod";
-import { focusedWinId, previews, settings, widget, windows } from "./getters.svelte.ts";
+import { focusedWinId, previews, settings, virtualDesktops, widget, windows } from "./getters.svelte.ts";
 import { monitors } from "libs/ui/svelte/runes/monitors.svelte.ts";
+import { filterSwitcherWindows } from "./filterWindows.ts";
 
 export { focusedWinId, previews, settings, widget, windows };
 
 const WidgetConfigSchema = z.object({
   onlyOnActiveMonitor: z.boolean(),
+  // optional so configs saved before this setting existed still parse
+  onlyOnActiveWorkspace: z.boolean().optional(),
 });
 
 const widgetConfig = $derived.by(
@@ -23,14 +26,14 @@ let autoConfirm = $state(false);
 
 let desiredPosition = $state<{ x: number; y: number } | null>(null);
 
-let selectedWindow = $state<number | null>(focusedWinId.value ?? null);
+let selectedWindow = $state<string | null>(focusedWinId.value ?? null);
 
 // Sync selectedWindow with focused window when the switcher is not visible
 $effect.root(() => {
   $effect(() => {
     if (!showing) {
-      const win = filteredWindows.find((w) => w.hwnd === focusedWinId.value);
-      selectedWindow = win?.hwnd ?? null;
+      const win = filteredWindows.find((w) => w.id === focusedWinId.value);
+      selectedWindow = win?.id ?? null;
     }
   });
 });
@@ -49,14 +52,15 @@ let activeMonitor = $derived.by(() => {
   return found || monitors.primaryMonitor;
 });
 
-// Windows shown in the switcher, optionally restricted to the active monitor
-let filteredWindows = $derived.by(() => {
-  const monitor = activeMonitor;
-  if (!widgetConfig.onlyOnActiveMonitor || !monitor) {
-    return windows.value;
-  }
-  return windows.value.filter((w) => w.monitor === monitor.id);
-});
+// Windows shown in the switcher, optionally restricted to the active monitor and/or workspace
+let filteredWindows = $derived(
+  filterSwitcherWindows(windows.value, {
+    onlyOnActiveMonitor: widgetConfig.onlyOnActiveMonitor,
+    onlyOnActiveWorkspace: widgetConfig.onlyOnActiveWorkspace,
+    activeMonitorId: activeMonitor?.id ?? null,
+    virtualDesktops: virtualDesktops.value,
+  }),
+);
 
 $effect.root(() => {
   widget.attachPosition();
@@ -88,7 +92,7 @@ class State {
     return selectedWindow;
   }
 
-  set selectedWindow(value: number | null) {
+  set selectedWindow(value: string | null) {
     selectedWindow = value;
   }
 
@@ -165,7 +169,7 @@ function onAltKeyUp() {
   if (showing && selectedWindow && autoConfirm) {
     showing = false;
     invoke(SeelenCommand.WegToggleWindowState, {
-      hwnd: selectedWindow,
+      id: selectedWindow,
       wasFocused: false,
     });
   }
@@ -192,13 +196,13 @@ widget.onTrigger((payload) => {
   // Use the currently selected window when already showing, otherwise start from focused
   const currentHwnd = showing ? selectedWindow : focusedWinId.value;
 
-  let index = targetWindows.findIndex((w) => w.hwnd === currentHwnd);
+  let index = targetWindows.findIndex((w) => w.id === currentHwnd);
   if (direction === "next") {
     if (index === -1) index = targetWindows.length - 1;
-    selectedWindow = targetWindows[(index + 1) % targetWindows.length]?.hwnd ?? null;
+    selectedWindow = targetWindows[(index + 1) % targetWindows.length]?.id ?? null;
   } else if (direction === "previous") {
     if (index === -1) index = 0;
-    selectedWindow = targetWindows[(index - 1 + targetWindows.length) % targetWindows.length]?.hwnd ?? null;
+    selectedWindow = targetWindows[(index - 1 + targetWindows.length) % targetWindows.length]?.id ?? null;
   }
 
   showing = true;

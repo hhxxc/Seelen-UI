@@ -1,15 +1,18 @@
 import { SeelenEvent, subscribe, Widget } from "@seelen-ui/lib";
-import {
-  type FocusedApp,
-  SeelenWegSide,
-  type UserAppWindow,
-  type UserAppWindowColors,
-  WegTemporalItemsVisibility,
-} from "@seelen-ui/lib/types";
+import { type FocusedApp, SeelenWegSide, type UserAppWindow, type UserAppWindowColors } from "@seelen-ui/lib/types";
 import { settingsState } from "./settings.svelte.ts";
 import { debounce } from "lodash";
 import type { AppOrFileWegItem } from "../types.ts";
-import { focused, interactables, previews, selfWinId, widgetStatuses, windowsColors } from "./getters.svelte.ts";
+import {
+  focused,
+  interactables,
+  previews,
+  selfWinId,
+  virtualDesktops,
+  widgetStatuses,
+  windowsColors,
+} from "./getters.svelte.ts";
+import { selectDockWindows } from "./dockWindows.ts";
 
 export { focused, interactables, previews, widgetStatuses, windowsColors };
 
@@ -23,18 +26,20 @@ const setDelayedFocused = debounce((v: FocusedApp) => {
 subscribe(SeelenEvent.GlobalFocusChanged, (e) => {
   focused.value = e.payload;
   setDelayedFocused(e.payload);
-  if (e.payload.hwnd !== selfWinId.value) {
+  if (e.payload.id !== selfWinId.value) {
     setDelayedFocused.flush();
   }
 });
 
-/** windows that belong to this dock, honoring the "On Monitor" temporal items visibility */
-const _dockWindows = $derived.by(() => {
-  if (settingsState.value.temporalItemsVisibility !== WegTemporalItemsVisibility.OnMonitor) {
-    return interactables.value;
-  }
-  return interactables.value.filter((w) => w.monitor === widget.decoded.monitorId);
-});
+/** windows that belong to this dock, honoring the temporal items visibility setting */
+const _dockWindows = $derived(
+  selectDockWindows(
+    interactables.value,
+    settingsState.value.temporalItemsVisibility,
+    widget.decoded.monitorId,
+    virtualDesktops.value,
+  ),
+);
 
 const _topInteractableWindow = $derived(
   interactables.value
@@ -48,13 +53,13 @@ const _currentMonitorMaximizedColors = $derived.by((): UserAppWindowColors | nul
     .toSorted((a, b) => b.lastForegroundAt - a.lastForegroundAt)
     .find((w) => !w.isIconic && w.isZoomed && w.monitor === monitorId);
   if (!maximized) return null;
-  return windowsColors.value[maximized.hwnd] ?? null;
+  return windowsColors.value[maximized.id] ?? null;
 });
 
 const _isDockOverlapped = $derived.by(() => {
   // If foreground is not in interactable windows, return false directly, this handled start menu or desktop focus cases.
   const foreground = focused.value;
-  if (!interactables.value.some((w) => w.hwnd === foreground.hwnd)) {
+  if (!interactables.value.some((w) => w.id === foreground.id)) {
     return false;
   }
 

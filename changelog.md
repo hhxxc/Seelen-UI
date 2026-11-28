@@ -1,5 +1,46 @@
 # Changelog
 
+## [2.8.12-dev]
+
+### breaking changes
+
+- all window identifiers (window handles) are now strings instead of numbers. As they are ids, no operations should be
+  done with them, so few consumers should be affected.
+- removed the `get_native_shell_wallpaper` and `set_native_shell_wallpaper` commands, the native wallpaper is now
+  managed internally (see below).
+
+### features
+
+- dock: new "On Workspace" unpinned items visibility, showing only the windows of the active workspace of the dock's
+  monitor.
+- task switcher: option to show only the apps of the active workspace.
+- window manager: the tiling layout is kept across app restarts within the same user session.
+- wallpaper manager: the native Windows wallpaper mirrors the wallpaper shown on the primary monitor (the image itself,
+  or its thumbnail for videos/themed wallpapers, black if none), so system screens like the admin (UAC) prompt match
+  Seelen UI. The user's own wallpaper (or slideshow) is restored when Seelen UI is closed or the wallpaper manager is
+  disabled.
+- system tray: the pinned state and order of the icons are now stored by Seelen UI instead of the Windows registry, so
+  they also work on Windows 10. The current Windows settings are imported once.
+- toolbar plugins: `Image()` accepts `isMask` and `Button()` accepts `onDoubleClick`.
+
+### fix
+
+- system tray: only one icon was shown for apps running several instances (e.g. QQ with several accounts) (#1989).
+- system tray: icon updates replacing the tooltip of the app with its name.
+- system tray: right click sent twice (and as middle click on the toolbar), double click not available on the toolbar,
+  and glyph icons invisible on the toolbar with light themes.
+
+- media popup: mixer only controlling one of the audio sessions of apps playing from several processes (e.g. Discord).
+- toolbar, dock and other always-on-top widgets going behind other windows after opening WinUI 3 apps (e.g. WhatsApp),
+  caused by a Windows App SDK bug, they are now put back on top automatically (#2020).
+
+### refactors
+
+- core library (`@seelen-ui/lib`): dropped Deno, it is now built with Node + TypeScript (same ESM/CJS entry points) and
+  only published to npm, JSR is no longer updated.
+- api: the window identifiers are now named `id` instead of `hwnd` (`UserAppWindow.id`, `FocusedApp.id`/`ownerId`,
+  `WindowPreviewTarget.id` and the window argument of commands). The old `hwnd` names are deprecated but still work.
+
 ## [2.8.11]
 
 ### features

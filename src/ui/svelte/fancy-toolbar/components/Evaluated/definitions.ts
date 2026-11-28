@@ -31,21 +31,24 @@ const EvaluatedImagePropsSchema = z.object({
   path: z.string().nullish(),
   /** change it to force the image to be reloaded (e.g. when the file is overwritten in place) */
   version: z.union([z.string(), z.number()]).nullish(),
+  /** use the image as alpha mask tinted with the text color (single color glyphs) */
+  isMask: z.boolean().nullish(),
 });
 
 export type EvaluatedButtonProps = z.infer<typeof EvaluatedButtonPropsSchema>;
 const EvaluatedButtonPropsSchema = z.object({
-  style: z.record(z.any()).default({}),
+  style: z.record(z.string(), z.any()).default({}),
   content: z.unknown().nullish(),
   tooltip: z.string().nullish(),
   onClick: z.string().nullish(),
+  onDoubleClick: z.string().nullish(),
   onAuxClick: z.string().nullish(),
   onContextMenu: z.string().nullish(),
 });
 
 export type EvaluatedGroupProps = z.infer<typeof EvaluatedGroupPropsSchema>;
 const EvaluatedGroupPropsSchema = z.object({
-  style: z.record(z.any()).default({}),
+  style: z.record(z.string(), z.any()).default({}),
   content: z.unknown().nullish(),
 });
 
@@ -110,9 +113,10 @@ export function parseComponent(value: unknown): ParsedComponent | null {
 }
 
 const ComponentCreatorScope = {
-  icon: (arg1?: unknown, arg2?: unknown) => ({
+  // legacy function, was not removed for backguard compatibility
+  icon: (arg1?: unknown) => ({
     [COMPONENT_KEY]: ObjectComponentKind.Icon,
-    props: EvaluatedReactIconPropsSchema.parse({ name: arg1, size: arg2 }),
+    props: EvaluatedReactIconPropsSchema.parse({ name: arg1 }),
   }),
   Icon: (arg: unknown) => ({
     [COMPONENT_KEY]: ObjectComponentKind.Icon,

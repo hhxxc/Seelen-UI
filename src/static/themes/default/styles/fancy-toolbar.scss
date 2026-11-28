@@ -1,9 +1,7 @@
 @mixin fade {
   opacity: 1;
   scale: 1;
-  transition:
-    opacity 200ms ease,
-    scale 200ms ease;
+  transition: opacity 200ms ease, scale 200ms ease;
 
   &[data-mounting] {
     @starting-style {
@@ -48,6 +46,10 @@
 .ft-bar-item-content {
   img {
     border-radius: calc(var(--config-item-size) * 0.3);
+  }
+
+  .ft-image-mask {
+    background-color: var(--slu-std-fg-color);
   }
 }
 

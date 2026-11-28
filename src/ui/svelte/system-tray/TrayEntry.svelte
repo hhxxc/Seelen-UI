@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SystrayIconAction, type SysTrayIcon } from "@seelen-ui/lib/types";
+  import { type SysTrayIcon, SystrayIconAction } from "@seelen-ui/lib/types";
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { invoke, SeelenCommand } from "@seelen-ui/lib";
   import { createSortable } from "@dnd-kit/svelte/sortable";
@@ -65,25 +65,30 @@
     data-skin="transparent"
     onclick={(e) => onClick(e, item.sessionId)}
     ondblclick={(e) => onDoubleClick(e, item.sessionId)}
-    onauxclick={(e) => onClick(e, item.sessionId)}
+    onauxclick={(e) => {
+      // `auxclick` is also fired for the right button, already handled by `oncontextmenu`
+      if (e.button === 1) {
+        onClick(e, item.sessionId);
+      }
+    }}
     oncontextmenu={(e) => onClick(e, item.sessionId)}
     onmouseenter={() => {
-      /* invoke(SeelenCommand.SendSystemTrayIconAction, {
-        id: item.sessionId,
-        action: SystrayIconAction.HoverEnter,
-      }); */
+      // invoke(SeelenCommand.SendSystemTrayIconAction, {
+      //   id: item.sessionId,
+      //   action: SystrayIconAction.HoverEnter,
+      // });
     }}
     onmousemove={() => {
-      /* invoke(SeelenCommand.SendSystemTrayIconAction, {
-        id: item.sessionId,
-        action: SystrayIconAction.HoverMove,
-      }); */
+      // invoke(SeelenCommand.SendSystemTrayIconAction, {
+      //   id: item.sessionId,
+      //   action: SystrayIconAction.HoverMove,
+      // });
     }}
     onmouseleave={() => {
-      /* invoke(SeelenCommand.SendSystemTrayIconAction, {
-        id: item.sessionId,
-        action: SystrayIconAction.HoverLeave,
-      }); */
+      // invoke(SeelenCommand.SendSystemTrayIconAction, {
+      //   id: item.sessionId,
+      //   action: SystrayIconAction.HoverLeave,
+      // });
     }}
   >
     <div class="system-tray-item-icon-box">
@@ -107,14 +112,14 @@
     </div>
 
     <span class="system-tray-item-label">
-      {item.tooltip || item.guid || `${item.windowHandle?.toString(16)}::${item.uid}`}
+      {item.tooltip || item.guid || `${item.windowHandle?.split("_")[0]}::${item.uid}`}
     </span>
   </button>
 
   <button
     data-skin="transparent"
     class="system-tray-item-pin"
-    disabled={!item.registryKey}
+    disabled={!item.key}
     onclick={() => setPinned(item.sessionId, !item.isPromoted)}
   >
     <Icon name={item.isPromoted ? "TbPinnedOff" : "TbPin"} />

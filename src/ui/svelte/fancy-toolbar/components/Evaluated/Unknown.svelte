@@ -1,7 +1,7 @@
 <script lang="ts">
   import { convertFileSrc } from "@tauri-apps/api/core";
   import type { IconName } from "libs/ui/icons";
-  import { Icon, FileIcon } from "libs/ui/svelte/components/Icon";
+  import { FileIcon, Icon } from "libs/ui/svelte/components/Icon";
   import { styleToString } from "../../utils.ts";
   import Unknown from "./Unknown.svelte";
   import { ObjectComponentKind, parseComponent } from "./definitions.ts";
@@ -16,7 +16,11 @@
 
   const parsed = $derived(parseComponent(content));
 
-  function imageSrc(props: { path?: string | null; url?: string | null; version?: string | number | null }): string {
+  function imageSrc(props: {
+    path?: string | null;
+    url?: string | null;
+    version?: string | number | null;
+  }): string {
     const src = props.path ? convertFileSrc(props.path) : props.url || "";
     if (!src || props.version == null || props.version === "") {
       return src;
@@ -41,8 +45,22 @@
   {:else if parsed.kind === ObjectComponentKind.AppIcon}
     <FileIcon path={parsed.props.path} umid={parsed.props.umid} />
   {:else if parsed.kind === ObjectComponentKind.Image}
-    <img src={imageSrc(parsed.props)} alt="" />
+    {#if parsed.props.isMask}
+      <span class="ft-image-mask" style:--image-url={`url("${imageSrc(parsed.props)}")`}></span>
+    {:else}
+      <img src={imageSrc(parsed.props)} alt="" />
+    {/if}
   {:else if parsed.kind === ObjectComponentKind.Button}
     <Button {parentId} {...parsed.props} />
   {/if}
 {/if}
+
+<style>
+  .ft-image-mask {
+    display: block;
+    width: var(--config-item-size);
+    height: var(--config-item-size);
+
+    mask: var(--image-url) center / contain no-repeat;
+  }
+</style>

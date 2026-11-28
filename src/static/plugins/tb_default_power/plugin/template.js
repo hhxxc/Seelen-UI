@@ -1,5 +1,5 @@
 if (!batteries.length) {
-  return icon("TbPlugConnected");
+  return Icon({ name: "TbPlugConnected" });
 }
 
 const averagePercentage = batteries.reduce((total, battery) => total + battery.percentage, 0) / batteries.length;
@@ -14,21 +14,21 @@ const isSmartChargeActive = batteries.some((battery) => battery.smartCharging);
 let group = [];
 
 if (powerMode === "BetterBattery" || powerMode === "BatterySaver") {
-  group.push(icon("IoLeaf"));
+  group.push(Icon({ name: "IoLeaf" }));
   group.push(" ");
 } else if (powerMode === "HighPerformance" || powerMode === "MaxPerformance") {
-  group.push(icon("IoSpeedometer"));
+  group.push(Icon({ name: "IoSpeedometer" }));
   group.push(" ");
 } else if (powerMode === "GameMode") {
-  group.push(icon("IoGameController"));
+  group.push(Icon({ name: "IoGameController" }));
   group.push(" ");
 } else if (powerMode === "MixedReality") {
-  group.push(icon("TbCardboardsFilled"));
+  group.push(Icon({ name: "TbCardboardsFilled" }));
   group.push(" ");
 }
 
 if (isSmartChargeActive) {
-  group.push(icon("IoHeart"));
+  group.push(Icon({ name: "IoHeart" }));
   group.push(" ");
 }
 
@@ -36,17 +36,17 @@ if (isSmartChargeActive) {
 // "plugged in but not charging" can not be read as charging. Charging uses the dedicated charging
 // icon, the level is still readable from the percentage next to it.
 if (isCharging) {
-  group.push(icon("BsBatteryCharging", 20));
+  group.push(Icon({ name: "BsBatteryCharging" }));
 } else if (averagePercentage > 90) {
-  group.push(icon("PiBatteryFullFill"));
+  group.push(Icon({ name: "PiBatteryFullFill" }));
 } else if (averagePercentage > 66) {
-  group.push(icon("PiBatteryHighFill"));
+  group.push(Icon({ name: "PiBatteryHighFill" }));
 } else if (averagePercentage > 33) {
-  group.push(icon("PiBatteryMediumFill"));
+  group.push(Icon({ name: "PiBatteryMediumFill" }));
 } else if (averagePercentage > 5) {
-  group.push(icon("PiBatteryLowFill"));
+  group.push(Icon({ name: "PiBatteryLowFill" }));
 } else {
-  group.push(icon("PiBatteryWarning"));
+  group.push(Icon({ name: "PiBatteryWarning" }));
 }
 
 group.push(" ");

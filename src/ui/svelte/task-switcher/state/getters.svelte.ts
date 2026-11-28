@@ -19,13 +19,17 @@ subscribe(SeelenEvent.UserAppWindowsChanged, ({ payload }) => {
 export const previews = lazyRune(() => invoke(SeelenCommand.GetUserAppWindowsPreviews));
 subscribe(SeelenEvent.UserAppWindowsPreviewsChanged, previews.setByPayload);
 
-export const focusedWinId = lazyRune(async () => (await invoke(SeelenCommand.GetFocusedApp)).hwnd);
+export const focusedWinId = lazyRune(async () => (await invoke(SeelenCommand.GetFocusedApp)).id);
 subscribe(SeelenEvent.GlobalFocusChanged, (e) => {
-  focusedWinId.value = e.payload.hwnd;
+  focusedWinId.value = e.payload.id;
 });
+
+export const virtualDesktops = lazyRune(() => invoke(SeelenCommand.StateGetVirtualDesktops));
+subscribe(SeelenEvent.VirtualDesktopsChanged, virtualDesktops.setByPayload);
 
 await Promise.all([
   settings.init(),
+  virtualDesktops.init(),
   windows.init(),
   previews.init(),
   focusedWinId.init(),
