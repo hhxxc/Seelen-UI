@@ -151,10 +151,10 @@
                     <p>{subEntry.text.$value}</p>
                   {:else if "image" in subEntry && subEntry.image["@src"]}
                     <img
-                    src={subEntry.image["@src"]}
-                    alt={subEntry.image["@alt"] || ""}
-                    onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
-                  />
+                      src={subEntry.image["@src"]}
+                      alt={subEntry.image["@alt"] || ""}
+                      onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+                    />
                   {/if}
                 {/each}
               </div>
