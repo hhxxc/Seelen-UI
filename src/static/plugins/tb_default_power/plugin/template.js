@@ -4,11 +4,12 @@ if (!batteries.length) {
 
 const averagePercentage = batteries.reduce((total, battery) => total + battery.percentage, 0) / batteries.length;
 
-// `power.acLineStatus === 1` only means the adapter is plugged in: a laptop in a charge-limit or
-// care mode reports "full"/"discharging" while still plugged, so it must not be shown as charging.
-const isCharging = batteries.some((battery) => {
-  return battery.state === "charging";
-});
+// The bolt means "the machine is on AC power": a laptop in a care/charge-limit mode reports
+// "full" while plugged in, and hiding the bolt there looks like the charger was lost.
+const isCharging = power.acLineStatus === 1 ||
+  batteries.some((battery) => {
+    return battery.state === "charging";
+  });
 const isSmartChargeActive = batteries.some((battery) => battery.smartCharging);
 
 let group = [];
